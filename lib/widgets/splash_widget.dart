@@ -30,12 +30,14 @@ class _SplashWidgetState extends State<SplashWidget>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    _scaleAnim = Tween<double>(begin: 0.92, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _fadeAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnim = Tween<double>(
+      begin: 0.92,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _fadeAnim = Tween<double>(
+      begin: 0.6,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     // Cycle messages
     Future.doWhile(() async {
@@ -72,21 +74,25 @@ class _SplashWidgetState extends State<SplashWidget>
                     color: AppColors.primary.withOpacity(0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.account_balance_wallet,
-                    color: AppColors.primary,
-                    size: 56,
+                  child: Image(
+                    image: AssetImage('assets/logo.png'),
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.contain,
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 28),
-            Text('SpendWise',
-                style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1)),
+            Text(
+              'SpendWise',
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1,
+              ),
+            ),
             const SizedBox(height: 8),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 400),
@@ -94,7 +100,9 @@ class _SplashWidgetState extends State<SplashWidget>
                 _messages[_msgIndex],
                 key: ValueKey(_msgIndex),
                 style: TextStyle(
-                    color: AppColors.textSecondary(context), fontSize: 14),
+                  color: AppColors.textSecondary(context),
+                  fontSize: 14,
+                ),
               ),
             ),
             const SizedBox(height: 40),
@@ -103,7 +111,8 @@ class _SplashWidgetState extends State<SplashWidget>
               child: LinearProgressIndicator(
                 backgroundColor: AppColors.border(context),
                 valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.primary),
+                  AppColors.primary,
+                ),
                 minHeight: 3,
                 borderRadius: BorderRadius.circular(4),
               ),
