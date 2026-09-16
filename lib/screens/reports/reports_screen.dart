@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/expense_provider.dart';
 import '../../providers/lending_provider.dart';
+import '../../providers/income_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/constants.dart';
 import '../../utils/expense_type.dart'; // <--- ADDED to read the tags
@@ -34,14 +35,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
         ],
       ),
-      body: Consumer2<ExpenseProvider, LendingProvider>(
-        builder: (context, expProvider, lendProvider, _) {
+      body: Consumer3<ExpenseProvider, LendingProvider, IncomeProvider>(
+        builder: (context, expProvider, lendProvider, incomeProvider, _) {
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildOverallSummary(expProvider, lendProvider),
+                _buildOverallSummary(expProvider, lendProvider, incomeProvider),
                 const SizedBox(height: 20),
                 _buildYearlyChart(expProvider),
                 const SizedBox(height: 20),
@@ -59,11 +60,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildOverallSummary(
-      ExpenseProvider exp, LendingProvider lend) {
+    ExpenseProvider exp,
+    LendingProvider lend,
+    IncomeProvider income,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionLabel('Financial overview'), // SENTENCE CASE
+        const SizedBox(height: 12),
+        _buildCashFlowCard(exp, income),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -112,20 +118,75 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  Widget _buildCashFlowCard(ExpenseProvider exp, IncomeProvider income) {
+    final cashFlow = income.currentMonthIncome - exp.currentMonthTotal;
+    final positive = cashFlow >= 0;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: (positive ? AppColors.primary : AppColors.expense).withOpacity(
+          0.1,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: (positive ? AppColors.primary : AppColors.expense).withOpacity(
+            0.25,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            positive ? Icons.trending_up : Icons.trending_down,
+            color: positive ? AppColors.primary : AppColors.expense,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'This month cash flow',
+              style: TextStyle(color: AppColors.textSecondary(context)),
+            ),
+          ),
+          Text(
+            _fmt(cashFlow),
+            style: TextStyle(
+              color: positive ? AppColors.primary : AppColors.expense,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildYearlyChart(ExpenseProvider provider) {
     final data = provider.monthlyTotals;
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
 
     final yearTotal = data.fold(
-        0.0, (sum, e) => sum + (e['total'] as num).toDouble());
+      0.0,
+      (sum, e) => sum + (e['total'] as num).toDouble(),
+    );
     final avgMonthly = data.isNotEmpty ? yearTotal / 12 : 0.0;
     final maxVal = data.isNotEmpty
         ? data
-            .map((e) => (e['total'] as num).toDouble())
-            .reduce((a, b) => a > b ? a : b)
+              .map((e) => (e['total'] as num).toDouble())
+              .reduce((a, b) => a > b ? a : b)
         : 1.0;
 
     return Column(
@@ -138,28 +199,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Row(
               children: [
                 IconButton(
-                  onPressed: () =>
-                      setState(() => _selectedYear--),
-                  icon: Icon(Icons.chevron_left,
-                      color: AppColors.textSecondary(context), size: 20),
+                  onPressed: () => setState(() => _selectedYear--),
+                  icon: Icon(
+                    Icons.chevron_left,
+                    color: AppColors.textSecondary(context),
+                    size: 20,
+                  ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                Text('$_selectedYear',
-                    style: TextStyle(
-                        color: AppColors.textPrimary(context),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700)),
+                Text(
+                  '$_selectedYear',
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 IconButton(
                   onPressed: _selectedYear < DateTime.now().year
-                      ? () =>
-                          setState(() => _selectedYear++)
+                      ? () => setState(() => _selectedYear++)
                       : null,
-                  icon: Icon(Icons.chevron_right,
-                      color: _selectedYear < DateTime.now().year
-                          ? AppColors.textSecondary(context)
-                          : AppColors.textMuted(context),
-                      size: 20),
+                  icon: Icon(
+                    Icons.chevron_right,
+                    color: _selectedYear < DateTime.now().year
+                        ? AppColors.textSecondary(context)
+                        : AppColors.textMuted(context),
+                    size: 20,
+                  ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -178,36 +245,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
           child: Column(
             children: [
               Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Total Spent',
-                          style: TextStyle(
-                              color: AppColors.textSecondary(context),
-                              fontSize: 11)),
-                      Text(_fmt(yearTotal),
-                          style: const TextStyle(
-                              color: AppColors.expense,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800)),
+                      Text(
+                        'Total Spent',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                      Text(
+                        _fmt(yearTotal),
+                        style: const TextStyle(
+                          color: AppColors.expense,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ],
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('Monthly Avg',
-                          style: TextStyle(
-                              color: AppColors.textSecondary(context),
-                              fontSize: 11)),
-                      Text(_fmt(avgMonthly),
-                          style: const TextStyle(
-                              color: AppColors.info,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800)),
+                      Text(
+                        'Monthly Avg',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                      Text(
+                        _fmt(avgMonthly),
+                        style: const TextStyle(
+                          color: AppColors.info,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -218,29 +295,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: List.generate(12, (i) {
-                    final mNum =
-                        (i + 1).toString().padLeft(2, '0');
+                    final mNum = (i + 1).toString().padLeft(2, '0');
                     final entry = data.firstWhere(
                       (e) => e['month'] == mNum,
                       orElse: () => {'total': 0.0},
                     );
-                    final val =
-                        (entry['total'] as num).toDouble();
+                    final val = (entry['total'] as num).toDouble();
                     final height = maxVal > 0
                         ? (val / maxVal * 90).clamp(4, 90)
                         : 4.0;
                     final isCurrent =
                         (i + 1) == DateTime.now().month &&
-                            _selectedYear ==
-                                DateTime.now().year;
+                        _selectedYear == DateTime.now().year;
 
                     return Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
                         child: Column(
-                          mainAxisAlignment:
-                              MainAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
                             if (val > 0)
                               Text(
@@ -248,13 +320,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     ? '${(val / 1000).toStringAsFixed(0)}k'
                                     : val.toStringAsFixed(0),
                                 style: TextStyle(
-                                    color: isCurrent
-                                        ? AppColors.expense
-                                        : AppColors
-                                            .textSecondary(context),
-                                    fontSize: 7,
-                                    fontWeight:
-                                        FontWeight.w600),
+                                  color: isCurrent
+                                      ? AppColors.expense
+                                      : AppColors.textSecondary(context),
+                                  fontSize: 7,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             const SizedBox(height: 2),
                             Container(
@@ -262,10 +333,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               decoration: BoxDecoration(
                                 color: isCurrent
                                     ? AppColors.expense
-                                    : AppColors.expense
-                                        .withOpacity(0.35),
-                                borderRadius:
-                                    const BorderRadius.vertical(
+                                    : AppColors.expense.withOpacity(0.35),
+                                borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(4),
                                 ),
                               ),
@@ -274,13 +343,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             Text(
                               months[i].substring(0, 1),
                               style: TextStyle(
-                                  color: isCurrent
-                                      ? AppColors.expense
-                                      : AppColors.textSecondary(context),
-                                  fontSize: 10,
-                                  fontWeight: isCurrent
-                                      ? FontWeight.w700
-                                      : FontWeight.normal),
+                                color: isCurrent
+                                    ? AppColors.expense
+                                    : AppColors.textSecondary(context),
+                                fontSize: 10,
+                                fontWeight: isCurrent
+                                    ? FontWeight.w700
+                                    : FontWeight.normal,
+                              ),
                             ),
                           ],
                         ),
@@ -292,44 +362,44 @@ class _ReportsScreenState extends State<ReportsScreen> {
               const SizedBox(height: 8),
               // Month table
               ...data.map((item) {
-                final mIdx =
-                    int.parse(item['month'] as String) - 1;
+                final mIdx = int.parse(item['month'] as String) - 1;
                 final val = (item['total'] as num).toDouble();
                 return Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
                       SizedBox(
-                          width: 36,
-                          child: Text(months[mIdx],
-                              style: TextStyle(
-                                  color:
-                                      AppColors.textSecondary(context),
-                                  fontSize: 12))),
+                        width: 36,
+                        child: Text(
+                          months[mIdx],
+                          style: TextStyle(
+                            color: AppColors.textSecondary(context),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                       Expanded(
                         child: ClipRRect(
-                          borderRadius:
-                              BorderRadius.circular(3),
+                          borderRadius: BorderRadius.circular(3),
                           child: LinearProgressIndicator(
-                            value: maxVal > 0
-                                ? val / maxVal
-                                : 0,
+                            value: maxVal > 0 ? val / maxVal : 0,
                             backgroundColor: AppColors.border(context),
-                            valueColor:
-                                AlwaysStoppedAnimation(
-                                    AppColors.expense
-                                        .withOpacity(0.7)),
+                            valueColor: AlwaysStoppedAnimation(
+                              AppColors.expense.withOpacity(0.7),
+                            ),
                             minHeight: 6,
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(_fmt(val),
-                          style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600)),
+                      Text(
+                        _fmt(val),
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -346,7 +416,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (data.isEmpty) return const SizedBox();
 
     final total = data.fold(
-        0.0, (sum, e) => sum + (e['total'] as num).toDouble());
+      0.0,
+      (sum, e) => sum + (e['total'] as num).toDouble(),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,7 +435,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             children: data.asMap().entries.map((e) {
               final isLast = e.key == data.length - 1;
               final item = e.value;
-              
+
               // FIX: Now reading from Tags just like Dashboard!
               final tagString = item['tag'] as String? ?? 'personal';
               final tagEnum = ExpenseTagHelper.fromString(tagString);
@@ -385,37 +457,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: color.withOpacity(0.15),
-                            borderRadius:
-                                BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Icon(icon,
-                              color: color, size: 18),
+                          child: Icon(icon, color: color, size: 18),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 mainAxisAlignment:
-                                    MainAxisAlignment
-                                        .spaceBetween,
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(name,
-                                      style: TextStyle(
-                                          color: AppColors
-                                              .textPrimary(context),
-                                          fontSize: 13,
-                                          fontWeight:
-                                              FontWeight.w600)),
-                                  Text(_fmt(amount),
-                                      style: TextStyle(
-                                          color: AppColors
-                                              .textPrimary(context),
-                                          fontSize: 13,
-                                          fontWeight:
-                                              FontWeight.w700)),
+                                  Text(
+                                    name,
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary(context),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    _fmt(amount),
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary(context),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -423,17 +493,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 children: [
                                   Expanded(
                                     child: ClipRRect(
-                                      borderRadius:
-                                          BorderRadius.circular(
-                                              3),
-                                      child:
-                                          LinearProgressIndicator(
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: LinearProgressIndicator(
                                         value: pct / 100,
-                                        backgroundColor:
-                                            AppColors.border(context),
-                                        valueColor:
-                                            AlwaysStoppedAnimation(
-                                                color),
+                                        backgroundColor: AppColors.border(
+                                          context,
+                                        ),
+                                        valueColor: AlwaysStoppedAnimation(
+                                          color,
+                                        ),
                                         minHeight: 5,
                                       ),
                                     ),
@@ -442,10 +510,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   Text(
                                     '${pct.toStringAsFixed(0)}% · $count txns',
                                     style: TextStyle(
-                                        color: color,
-                                        fontSize: 10,
-                                        fontWeight:
-                                            FontWeight.w600),
+                                      color: color,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -456,8 +524,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ),
                   ),
                   if (!isLast)
-                    Divider(
-                        height: 1, color: AppColors.border(context)),
+                    Divider(height: 1, color: AppColors.border(context)),
                 ],
               );
             }).toList(),
@@ -482,26 +549,41 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
           child: Column(
             children: [
-              _lendRow('Total Lent', provider.totalLent,
-                  AppColors.purple),
+              _lendRow('Total Lent', provider.totalLent, AppColors.purple),
               Divider(color: AppColors.border(context), height: 20),
-              _lendRow('Returned to You',
-                  provider.totalLentReturned, AppColors.primary),
+              _lendRow(
+                'Returned to You',
+                provider.totalLentReturned,
+                AppColors.primary,
+              ),
               Divider(color: AppColors.border(context), height: 20),
-              _lendRow('Still Outstanding',
-                  provider.outstandingLent, AppColors.warning),
+              _lendRow(
+                'Still Outstanding',
+                provider.outstandingLent,
+                AppColors.warning,
+              ),
               Divider(
-                  color: AppColors.border(context),
-                  height: 20,
-                  thickness: 2),
-              _lendRow('Total Borrowed', provider.totalBorrowed,
-                  AppColors.teal),
+                color: AppColors.border(context),
+                height: 20,
+                thickness: 2,
+              ),
+              _lendRow(
+                'Total Borrowed',
+                provider.totalBorrowed,
+                AppColors.teal,
+              ),
               Divider(color: AppColors.border(context), height: 20),
-              _lendRow('You Returned',
-                  provider.totalBorrowedReturned, AppColors.primary),
+              _lendRow(
+                'You Returned',
+                provider.totalBorrowedReturned,
+                AppColors.primary,
+              ),
               Divider(color: AppColors.border(context), height: 20),
-              _lendRow('Still You Owe',
-                  provider.outstandingBorrowed, AppColors.expense),
+              _lendRow(
+                'Still You Owe',
+                provider.outstandingBorrowed,
+                AppColors.expense,
+              ),
             ],
           ),
         ),
@@ -513,14 +595,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: TextStyle(
-                color: AppColors.textSecondary(context), fontSize: 13)),
-        Text(_fmt(value),
-            style: TextStyle(
-                color: color,
-                fontSize: 14,
-                fontWeight: FontWeight.w700)),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.textSecondary(context),
+            fontSize: 13,
+          ),
+        ),
+        Text(
+          _fmt(value),
+          style: TextStyle(
+            color: color,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ],
     );
   }
@@ -548,7 +637,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   try {
                     await provider.exportBackup();
                     if (mounted) {
-                      AppUtils.showToast(context, 'Backup exported!'); // Updated to new Toast
+                      AppUtils.showToast(
+                        context,
+                        'Backup exported!',
+                      ); // Updated to new Toast
                     }
                   } catch (e) {
                     if (mounted) {
@@ -557,9 +649,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   }
                 },
               ),
-              
+
               Divider(height: 1, color: AppColors.border(context)),
-_actionTile(
+              _actionTile(
                 icon: Icons.download_outlined,
                 color: AppColors.warning,
                 title: 'Restore Backup',
@@ -570,27 +662,33 @@ _actionTile(
                     builder: (_) => AlertDialog(
                       backgroundColor: AppColors.card(context),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                      title: Text('Restore Backup?',
-                          style: TextStyle(
-                              color: AppColors.textPrimary(context))),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      title: Text(
+                        'Restore Backup?',
+                        style: TextStyle(color: AppColors.textPrimary(context)),
+                      ),
                       content: Text(
-                          'This replaces ALL current data. Cannot be undone.',
-                          style: TextStyle(
-                              color: AppColors.textSecondary(context))),
+                        'This replaces ALL current data. Cannot be undone.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                        ),
+                      ),
                       actions: [
                         TextButton(
-                            onPressed: () =>
-                                Navigator.pop(context, false),
-                            child: Text('Cancel',
-                                style: TextStyle(
-                                    color: AppColors
-                                        .textSecondary(context)))),
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: AppColors.textSecondary(context),
+                            ),
+                          ),
+                        ),
                         ElevatedButton(
-                          onPressed: () =>
-                              Navigator.pop(context, true),
+                          onPressed: () => Navigator.pop(context, true),
                           style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.expense),
+                            backgroundColor: AppColors.expense,
+                          ),
                           child: const Text('Restore'),
                         ),
                       ],
@@ -598,19 +696,22 @@ _actionTile(
                   );
                   if (confirm == true && mounted) {
                     final result = await provider.importBackup();
-                    
+
                     if (mounted) {
                       // ─── THE FIX: Force Lending & Borrowing to refresh! ───
                       if (result == 'success') {
                         context.read<LendingProvider>().loadAll();
                       }
                       // ──────────────────────────────────────────────────────
-                      
-                      AppUtils.showToast(context, result == 'success'
-                          ? 'Data restored successfully!'
-                          : result == 'cancelled'
-                              ? 'Import cancelled'
-                              : 'Invalid backup file');
+
+                      AppUtils.showToast(
+                        context,
+                        result == 'success'
+                            ? 'Data restored successfully!'
+                            : result == 'cancelled'
+                            ? 'Import cancelled'
+                            : 'Invalid backup file',
+                      );
                     }
                   }
                 },
@@ -640,16 +741,23 @@ _actionTile(
         ),
         child: Icon(icon, color: color, size: 20),
       ),
-      title: Text(title,
-          style: TextStyle(
-              color: AppColors.textPrimary(context),
-              fontSize: 14,
-              fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle,
-          style: TextStyle(
-              color: AppColors.textSecondary(context), fontSize: 12)),
-      trailing: Icon(Icons.chevron_right,
-          color: AppColors.textSecondary(context), size: 20),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: AppColors.textPrimary(context),
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+      ),
+      trailing: Icon(
+        Icons.chevron_right,
+        color: AppColors.textSecondary(context),
+        size: 20,
+      ),
     );
   }
 
@@ -658,8 +766,8 @@ _actionTile(
       context: context,
       backgroundColor: AppColors.card(context),
       shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -668,26 +776,29 @@ _actionTile(
           children: [
             Center(
               child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                      color: AppColors.border(context),
-                      borderRadius: BorderRadius.circular(2))),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border(context),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
-            Text('About SpendWise',
-                style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700)),
+            Text(
+              'About SpendWise',
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 16),
             _infoRow(Icons.info_outline, 'Version', '1.0.0'),
             const SizedBox(height: 10),
-            _infoRow(Icons.storage_outlined, 'Storage',
-                'Local · Offline'),
+            _infoRow(Icons.storage_outlined, 'Storage', 'Local · Offline'),
             const SizedBox(height: 10),
-            _infoRow(Icons.phone_android_outlined, 'Platform',
-                'Android & iOS'),
+            _infoRow(Icons.phone_android_outlined, 'Platform', 'Android & iOS'),
             const SizedBox(height: 16),
             Divider(color: AppColors.border(context)),
             const SizedBox(height: 12),
@@ -695,8 +806,9 @@ _actionTile(
               child: Text(
                 'Developed by Sadam · linkedin.com/in/sadam452',
                 style: TextStyle(
-                    color: AppColors.textSecondary(context),
-                    fontSize: 12),
+                  color: AppColors.textSecondary(context),
+                  fontSize: 12,
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -711,15 +823,22 @@ _actionTile(
       children: [
         Icon(icon, color: AppColors.primary, size: 18),
         const SizedBox(width: 12),
-        Text(label,
-            style: TextStyle(
-                color: AppColors.textSecondary(context), fontSize: 13)),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.textSecondary(context),
+            fontSize: 13,
+          ),
+        ),
         const Spacer(),
-        Text(value,
-            style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 13,
-                fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: TextStyle(
+            color: AppColors.textPrimary(context),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
@@ -732,12 +851,15 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(text,
-      style: TextStyle(
-          color: AppColors.textSecondary(context),
-          fontSize: 12, // Matched Dashboard Size
-          fontWeight: FontWeight.w700, // Matched Dashboard Weight
-          letterSpacing: 0.5)); // Matched Dashboard Spacing
+  Widget build(BuildContext context) => Text(
+    text,
+    style: TextStyle(
+      color: AppColors.textSecondary(context),
+      fontSize: 12, // Matched Dashboard Size
+      fontWeight: FontWeight.w700, // Matched Dashboard Weight
+      letterSpacing: 0.5,
+    ),
+  ); // Matched Dashboard Spacing
 }
 
 class _StatCard extends StatelessWidget {
@@ -774,15 +896,22 @@ class _StatCard extends StatelessWidget {
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(height: 10),
-          Text(value,
-              style: TextStyle(
-                  color: color,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(label,
-              style: TextStyle(
-                  color: AppColors.textSecondary(context), fontSize: 11)),
+          Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 11,
+            ),
+          ),
         ],
       ),
     );

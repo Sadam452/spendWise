@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import '../models/expense.dart';
 import '../models/lending_models.dart';
 import '../models/budget.dart';
+import '../models/income.dart';
 
 class DBHelper {
   static final DBHelper instance = DBHelper._init();
@@ -21,7 +22,7 @@ class DBHelper {
     final path = join(dbPath, fileName);
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -39,6 +40,16 @@ class DBHelper {
         is_recurring INTEGER DEFAULT 0,
         tag TEXT DEFAULT 'personal',
         recurrence_group TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE income (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        source TEXT NOT NULL,
+        notes TEXT,
         created_at TEXT NOT NULL
       )
     ''');
@@ -164,6 +175,18 @@ class DBHelper {
           recurrence_group TEXT NOT NULL,
           occurrence_date TEXT NOT NULL,
           PRIMARY KEY (recurrence_group, occurrence_date)
+        )
+      ''');
+    }
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS income (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          amount REAL NOT NULL,
+          date TEXT NOT NULL,
+          source TEXT NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL
         )
       ''');
     }
@@ -390,6 +413,52 @@ class DBHelper {
     return await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<Income> insertIncome(Income income) async {
+    final db = await database;
+    final id = await db.insert('income', income.toMap());
+    return Income(
+      id: id,
+      amount: income.amount,
+      date: income.date,
+      source: income.source,
+      notes: income.notes,
+      createdAt: income.createdAt,
+    );
+  }
+
+  Future<List<Income>> getAllIncome() async {
+    final db = await database;
+    final rows = await db.query('income', orderBy: 'date DESC, id DESC');
+    return rows.map(Income.fromMap).toList();
+  }
+
+  Future<double> getIncomeTotalByDateRange(DateTime start, DateTime end) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT SUM(amount) AS total FROM income WHERE date >= ? AND date <= ?',
+      [
+        start.toIso8601String(),
+        DateTime(end.year, end.month, end.day, 23, 59, 59).toIso8601String(),
+      ],
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0;
+  }
+
+  Future<int> updateIncome(Income income) async {
+    final db = await database;
+    return db.update(
+      'income',
+      income.toMap(),
+      where: 'id = ?',
+      whereArgs: [income.id],
+    );
+  }
+
+  Future<int> deleteIncome(int id) async {
+    final db = await database;
+    return db.delete('income', where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<void> deleteRecurringOccurrence(Expense expense) async {
     final db = await database;
     if (expense.id == null || expense.recurrenceGroup == null) {
@@ -555,9 +624,10 @@ class DBHelper {
   Future<Map<String, dynamic>> exportAllData() async {
     final db = await database;
     return {
-      'version': 2, // Bumped version to reflect new database schema
+      'version': 4,
       'exported_at': DateTime.now().toIso8601String(),
       'expenses': await db.query('expenses'),
+      'income': await db.query('income'),
       'lent_money': await db.query('lent_money'),
       'borrowed_money': await db.query('borrowed_money'),
       'budgets': await db.query('budgets'), // Safely extracting budgets
@@ -576,6 +646,7 @@ class DBHelper {
     await db.transaction((txn) async {
       // 1. Wipe current data cleanly
       await txn.delete('expenses');
+      await txn.delete('income');
       await txn.delete('lent_money');
       await txn.delete('borrowed_money');
       await txn.delete('budgets');
@@ -586,6 +657,9 @@ class DBHelper {
       // 2. Restore all data safely
       for (final row in data['expenses'] ?? []) {
         await txn.insert('expenses', Map<String, dynamic>.from(row));
+      }
+      for (final row in data['income'] ?? []) {
+        await txn.insert('income', Map<String, dynamic>.from(row));
       }
       for (final row in data['lent_money'] ?? []) {
         await txn.insert('lent_money', Map<String, dynamic>.from(row));

@@ -9,15 +9,18 @@ import 'utils/notification_service.dart';
 import 'screens/main_screen.dart';
 import 'widgets/splash_widget.dart';
 import 'providers/security_provider.dart';
+import 'providers/income_provider.dart';
 import 'screens/lock_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
   await NotificationService.instance.init();
   await NotificationService.instance.scheduleDailyReminder();
   runApp(const SpendWiseApp());
@@ -34,6 +37,7 @@ class SpendWiseApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => LendingProvider()),
         ChangeNotifierProvider(create: (_) => SecurityProvider()),
+        ChangeNotifierProvider(create: (_) => IncomeProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -71,6 +75,7 @@ class _AppLoaderState extends State<_AppLoader> {
     await Future.wait([
       context.read<ExpenseProvider>().init(),
       context.read<LendingProvider>().loadAll(),
+      context.read<IncomeProvider>().init(),
       Future.delayed(const Duration(milliseconds: 1500)),
     ]);
     if (mounted) setState(() => _ready = true);
@@ -83,9 +88,9 @@ class _AppLoaderState extends State<_AppLoader> {
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 500),
-      child: !_ready 
-          ? const SplashWidget() 
-          : (isSecure ? const LockScreen() : const MainScreen()), 
+      child: !_ready
+          ? const SplashWidget()
+          : (isSecure ? const LockScreen() : const MainScreen()),
     );
   }
 }

@@ -18,61 +18,46 @@ class InsightsWidget extends StatelessWidget {
     if (expenses.isEmpty) return const SizedBox();
 
     final now = DateTime.now();
-    final today = expenses.where((e) =>
-        e.date.year == now.year &&
-        e.date.month == now.month &&
-        e.date.day == now.day);
+    final today = expenses.where(
+      (e) =>
+          e.date.year == now.year &&
+          e.date.month == now.month &&
+          e.date.day == now.day,
+    );
 
-    final todayTotal =
-        today.fold(0.0, (sum, e) => sum + e.amount);
+    final todayTotal = today.fold(0.0, (sum, e) => sum + e.amount);
 
     // Daily average
     final days = expenses.isNotEmpty
-        ? now
-            .difference(expenses.last.date)
-            .inDays
-            .clamp(1, 365)
+        ? now.difference(expenses.last.date).inDays.clamp(1, 365)
         : 1;
-    final total =
-        expenses.fold(0.0, (sum, e) => sum + e.amount);
+    final total = expenses.fold(0.0, (sum, e) => sum + e.amount);
     final dailyAvg = total / days;
 
-    // Top category
-    final catMap = <int, double>{};
-    for (final e in expenses) {
-      catMap[e.categoryId] =
-          (catMap[e.categoryId] ?? 0) + e.amount;
-    }
-    final topCatId = catMap.isNotEmpty
-        ? catMap.entries
-            .reduce((a, b) => a.value > b.value ? a : b)
-            .key
-        : 1;
-    final topCat = AppConstants.getCategoryById(topCatId);
-
-    // Streak — consecutive days with expense
-    int streak = 0;
-    DateTime check = DateTime(now.year, now.month, now.day);
-    while (true) {
-      final hasExpense = expenses.any((e) =>
-          e.date.year == check.year &&
-          e.date.month == check.month &&
-          e.date.day == check.day);
-      if (!hasExpense) break;
-      streak++;
-      check = check.subtract(const Duration(days: 1));
-    }
-
-    // Tag breakdown
+    // Top tag
     final tagMap = <ExpenseTag, double>{};
     for (final e in expenses) {
       final tag = ExpenseTagHelper.fromString(e.tag);
       tagMap[tag] = (tagMap[tag] ?? 0) + e.amount;
     }
+
+    // Streak — consecutive days with expense
+    int streak = 0;
+    DateTime check = DateTime(now.year, now.month, now.day);
+    while (true) {
+      final hasExpense = expenses.any(
+        (e) =>
+            e.date.year == check.year &&
+            e.date.month == check.month &&
+            e.date.day == check.day,
+      );
+      if (!hasExpense) break;
+      streak++;
+      check = check.subtract(const Duration(days: 1));
+    }
+
     final topTag = tagMap.isNotEmpty
-        ? tagMap.entries
-            .reduce((a, b) => a.value > b.value ? a : b)
-            .key
+        ? tagMap.entries.reduce((a, b) => a.value > b.value ? a : b).key
         : ExpenseTag.personal;
 
     return Column(
@@ -106,31 +91,21 @@ class InsightsWidget extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               _InsightCard(
-                icon: topCat.icon,
-                label: 'Top Category',
-                value: topCat.name,
-                sub: _fmt(catMap[topCatId] ?? 0),
-                color: topCat.color,
+                icon: ExpenseTagHelper.icon(topTag),
+                label: 'Top Tag',
+                value: ExpenseTagHelper.label(topTag),
+                sub: _fmt(tagMap[topTag] ?? 0),
+                color: ExpenseTagHelper.color(topTag),
               ),
               const SizedBox(width: 12),
               _InsightCard(
                 icon: Icons.local_fire_department_outlined,
                 label: 'Logging Streak',
                 value: '$streak day${streak == 1 ? '' : 's'}',
-                sub: streak > 0
-                    ? '🔥 Keep it up!'
-                    : 'Start logging today',
+                sub: streak > 0 ? '🔥 Keep it up!' : 'Start logging today',
                 color: streak > 3
                     ? AppColors.expense
                     : AppColors.textSecondary(context),
-              ),
-              const SizedBox(width: 12),
-              _InsightCard(
-                icon: ExpenseTagHelper.icon(topTag),
-                label: 'Top Tag',
-                value: ExpenseTagHelper.label(topTag),
-                sub: _fmt(tagMap[topTag] ?? 0),
-                color: ExpenseTagHelper.color(topTag),
               ),
             ],
           ),
@@ -173,29 +148,39 @@ class _InsightCard extends StatelessWidget {
               Icon(icon, color: color, size: 16),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(label,
-                    style: TextStyle(
-                        color: AppColors.textSecondary(context),
-                        fontSize: 11),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: AppColors.textSecondary(context),
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          Text(value,
-              style: TextStyle(
-                  color: color,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 4),
-          Text(sub,
-              style: TextStyle(
-                  color: AppColors.textSecondary(context), fontSize: 11),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
+          Text(
+            sub,
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 11,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -207,10 +192,13 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(text,
-      style: TextStyle(
-          color: AppColors.textSecondary(context),
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.8));
+  Widget build(BuildContext context) => Text(
+    text,
+    style: TextStyle(
+      color: AppColors.textSecondary(context),
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.8,
+    ),
+  );
 }

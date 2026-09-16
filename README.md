@@ -7,6 +7,18 @@ notifications, and optional biometric app locking.
 All financial data is stored locally on the device in SQLite. The app does not
 require an account or a remote backend.
 
+## Income and cash flow
+
+The Income tab records money received, including the amount, source, date, and
+optional notes. Reports highlight current-month cash flow:
+
+```text
+cash flow = income - expenses
+```
+
+Positive cash flow is shown in green and negative cash flow is shown in red.
+Income records are included in local JSON backups and restore operations.
+
 ## Features
 
 ### Expense tracking
@@ -189,6 +201,7 @@ The database is created by `DBHelper` as `spendwise.db` in the platform's
 application database directory. It currently contains tables for:
 
 - `expenses`
+- `income`
 - `recurring_series`
 - `recurring_skips`
 - `lent_money`
