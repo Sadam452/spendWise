@@ -133,7 +133,7 @@ flutter doctor
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/<your-username>/<repository-name>.git
+git clone https://github.com/Sadam452/spendWise.git
 cd spendwise
 flutter pub get
 ```
@@ -233,26 +233,6 @@ permissions are declared in the Android manifest.
 
 Biometric authentication requires a device or emulator configured with a
 supported lock method. Behavior varies by platform and device manufacturer.
-
-## Privacy and repository hygiene
-
-Do not commit:
-
-- `.env` files or tokens
-- Android signing keys, `key.properties`, keystores, or certificates
-- Firebase service configuration files
-- `android/local.properties`
-- SQLite databases or exported backups
-- Build output, generated tool directories, or IDE state
-
-The root `.gitignore` and platform-specific ignore files cover these categories.
-Before publishing changes, inspect the staged file list:
-
-```bash
-git status --short
-git diff --cached --check
-```
-
 ## Building releases
 
 Android debug build:
@@ -267,11 +247,8 @@ Android release build:
 flutter build appbundle --release
 ```
 
-Release signing credentials must be configured locally and must never be
-committed. Review the Android and Apple platform signing requirements before
-distributing builds.
+
 
 ## License
 
-No license has been selected for this project yet. Add an explicit license
-before distributing the source publicly or accepting external contributions.
+No license has been selected for this project yet.
