@@ -499,6 +499,13 @@ class _LentTab extends StatelessWidget {
                   outstanding: provider.outstandingLent,
                   color: AppColors.purple,
                 ),
+                const SizedBox(height: 12),
+                _LendingFilterRow(
+                  outstandingLent: provider.outstandingLent,
+                  outstandingBorrowed: provider.outstandingBorrowed,
+                  sort: provider.lentSort,
+                  onSortChanged: provider.setLentSort,
+                ),
                 const SizedBox(height: 20),
                 if (provider.lentList.isEmpty)
                   _buildEmpty(
@@ -616,6 +623,13 @@ class _BorrowedTab extends StatelessWidget {
                   outstandingLabel: 'Still Owe',
                   outstanding: provider.outstandingBorrowed,
                   color: AppColors.teal,
+                ),
+                const SizedBox(height: 12),
+                _LendingFilterRow(
+                  outstandingLent: provider.outstandingLent,
+                  outstandingBorrowed: provider.outstandingBorrowed,
+                  sort: provider.borrowedSort,
+                  onSortChanged: provider.setBorrowedSort,
                 ),
                 const SizedBox(height: 20),
                 if (provider.borrowedList.isEmpty)
@@ -741,6 +755,87 @@ class _BorrowedTab extends StatelessWidget {
 }
 
 // ─── SHARED WIDGETS & CARDS ───────────────────────────────────────────────────
+
+class _LendingFilterRow extends StatelessWidget {
+  final double outstandingLent;
+  final double outstandingBorrowed;
+  final String sort;
+  final ValueChanged<String> onSortChanged;
+
+  const _LendingFilterRow({
+    required this.outstandingLent,
+    required this.outstandingBorrowed,
+    required this.sort,
+    required this.onSortChanged,
+  });
+
+  String _fmt(double value) =>
+      '${AppConstants.currency}${NumberFormat('#,##,###').format(value)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final netPosition = outstandingLent - outstandingBorrowed;
+    final netLabel = netPosition > 0
+        ? 'Net owed'
+        : netPosition < 0
+        ? 'Net you owe'
+        : 'Balanced';
+    final netColor = netPosition > 0
+        ? AppColors.primary
+        : netPosition < 0
+        ? AppColors.expense
+        : AppColors.textSecondary(context);
+
+    return Row(
+      children: [
+        PopupMenuButton<String>(
+          tooltip: 'Sort records',
+          initialValue: sort,
+          onSelected: onSortChanged,
+          itemBuilder: (_) => LendingProvider.sortOptions.entries
+              .map(
+                (option) => PopupMenuItem<String>(
+                  value: option.key,
+                  child: Text(option.value),
+                ),
+              )
+              .toList(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.sort, size: 18, color: AppColors.info),
+              const SizedBox(width: 4),
+              Text(
+                LendingProvider.sortOptions[sort] ?? 'Unsettled first',
+                style: const TextStyle(
+                  color: AppColors.info,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Icon(Icons.arrow_drop_down, color: AppColors.info),
+            ],
+          ),
+        ),
+        const Spacer(),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(netLabel, style: TextStyle(color: netColor, fontSize: 11)),
+            Text(
+              _fmt(netPosition.abs()),
+              style: TextStyle(
+                color: netColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
 
 class _LendingSummary extends StatelessWidget {
   final String totalLabel;

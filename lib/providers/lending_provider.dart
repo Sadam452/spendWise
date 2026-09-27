@@ -1,12 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/db_helper.dart';
 import '../models/lending_models.dart';
 
 class LendingProvider extends ChangeNotifier {
   final DBHelper _db = DBHelper.instance;
+  static const sortOptions = {
+    'unsettled': 'Unsettled first',
+    'highest': 'Highest outstanding',
+    'lowest': 'Lowest outstanding',
+    'newest': 'Newest first',
+    'oldest': 'Oldest first',
+  };
+  static const _lentSortKey = 'lending_lent_sort';
+  static const _borrowedSortKey = 'lending_borrowed_sort';
 
   List<LentMoney> lentList = [];
   List<BorrowedMoney> borrowedList = [];
+  String lentSort = 'unsettled';
+  String borrowedSort = 'unsettled';
+  bool _sortPreferencesLoaded = false;
 
   double totalLent = 0;
   double totalLentReturned = 0;
@@ -34,8 +47,111 @@ class LendingProvider extends ChangeNotifier {
   }
 
   Future<void> loadAll() async {
+    await _loadSortPreferences();
     await loadLent();
     await loadBorrowed();
+  }
+
+  Future<void> _loadSortPreferences() async {
+    if (_sortPreferencesLoaded) return;
+    final prefs = await SharedPreferences.getInstance();
+    final storedLentSort = prefs.getString(_lentSortKey);
+    final storedBorrowedSort = prefs.getString(_borrowedSortKey);
+    lentSort = sortOptions.containsKey(storedLentSort)
+        ? storedLentSort!
+        : 'unsettled';
+    borrowedSort = sortOptions.containsKey(storedBorrowedSort)
+        ? storedBorrowedSort!
+        : 'unsettled';
+    _sortPreferencesLoaded = true;
+  }
+
+  Future<void> setLentSort(String sort) async {
+    if (!sortOptions.containsKey(sort) || sort == lentSort) return;
+    lentSort = sort;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lentSortKey, sort);
+  }
+
+  Future<void> setBorrowedSort(String sort) async {
+    if (!sortOptions.containsKey(sort) || sort == borrowedSort) return;
+    borrowedSort = sort;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_borrowedSortKey, sort);
+  }
+
+  int _compareEntries(LentMoney a, LentMoney b, String sort) {
+    final aSettled = a.outstanding <= 0;
+    final bSettled = b.outstanding <= 0;
+    if (aSettled != bSettled) return aSettled ? 1 : -1;
+    switch (sort) {
+      case 'highest':
+        return b.outstanding.compareTo(a.outstanding);
+      case 'lowest':
+        return a.outstanding.compareTo(b.outstanding);
+      case 'oldest':
+        return a.date.compareTo(b.date);
+      case 'newest':
+      case 'unsettled':
+      default:
+        return b.date.compareTo(a.date);
+    }
+  }
+
+  DateTime _personSortDate(
+    PersonLendingSummary person, {
+    required bool oldest,
+  }) {
+    final outstandingEntries = person.entries
+        .where((entry) => entry.outstanding > 0)
+        .toList();
+    final candidates = outstandingEntries.isNotEmpty
+        ? outstandingEntries
+        : person.entries;
+    return candidates
+        .map((entry) => entry.date)
+        .reduce(
+          (a, b) => oldest ? (a.isBefore(b) ? a : b) : (a.isAfter(b) ? a : b),
+        );
+  }
+
+  List<PersonLendingSummary> _sortPeople(
+    List<PersonLendingSummary> people,
+    String sort,
+  ) {
+    for (final person in people) {
+      person.entries.sort((a, b) => _compareEntries(a, b, sort));
+    }
+    people.sort((a, b) {
+      final aOutstanding = a.outstanding <= 0;
+      final bOutstanding = b.outstanding <= 0;
+      if (aOutstanding != bOutstanding) return aOutstanding ? 1 : -1;
+      switch (sort) {
+        case 'highest':
+          return b.outstanding.compareTo(a.outstanding);
+        case 'lowest':
+          return a.outstanding.compareTo(b.outstanding);
+        case 'oldest':
+          return _personSortDate(
+            a,
+            oldest: true,
+          ).compareTo(_personSortDate(b, oldest: true));
+        case 'newest':
+          return _personSortDate(
+            b,
+            oldest: false,
+          ).compareTo(_personSortDate(a, oldest: false));
+        case 'unsettled':
+        default:
+          return _personSortDate(
+            b,
+            oldest: false,
+          ).compareTo(_personSortDate(a, oldest: false));
+      }
+    });
+    return people;
   }
 
   String _personKey(String phone) {
@@ -116,7 +232,7 @@ class LendingProvider extends ChangeNotifier {
       grouped[key]!.add(item);
     }
 
-    return grouped.values.map((entries) {
+    final people = grouped.values.map((entries) {
       final first = entries.first;
 
       final total = entries.fold(0.0, (sum, e) => sum + e.amount);
@@ -131,6 +247,7 @@ class LendingProvider extends ChangeNotifier {
         entries: entries,
       );
     }).toList();
+    return _sortPeople(people, lentSort);
   }
 
   List<PersonLendingSummary> get groupedBorrowed {
@@ -143,7 +260,7 @@ class LendingProvider extends ChangeNotifier {
       grouped[key]!.add(item);
     }
 
-    return grouped.values.map((entries) {
+    final people = grouped.values.map((entries) {
       final first = entries.first;
 
       final total = entries.fold(0.0, (sum, e) => sum + e.amount);
@@ -171,6 +288,7 @@ class LendingProvider extends ChangeNotifier {
             .toList(),
       );
     }).toList();
+    return _sortPeople(people, borrowedSort);
   }
 
   // Adds a partial return to history AND updates the main balance
