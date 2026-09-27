@@ -320,6 +320,32 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
+  Future<Map<String, double>> getLifetimeIncomeAndExpenseTotals() async {
+    final db = await database;
+    final throughDate = DateTime.now();
+    final end = DateTime(
+      throughDate.year,
+      throughDate.month,
+      throughDate.day,
+      23,
+      59,
+      59,
+    ).toIso8601String();
+    final result = await db.rawQuery(
+      '''
+      SELECT
+        (SELECT COALESCE(SUM(amount), 0) FROM income WHERE date <= ?) AS income,
+        (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE date <= ?) AS expenses
+      ''',
+      [end, end],
+    );
+    final row = result.single;
+    return {
+      'income': (row['income'] as num).toDouble(),
+      'expenses': (row['expenses'] as num).toDouble(),
+    };
+  }
+
   Future<List<Map<String, dynamic>>> getMonthlyTotals(int year) async {
     final db = await database;
     final result = await db.rawQuery(
@@ -335,6 +361,44 @@ class DBHelper {
       [year.toString()],
     );
     return result;
+  }
+
+  Future<List<Map<String, dynamic>>> getMonthlyCashFlow(
+    DateTime throughMonth, {
+    int monthCount = 6,
+  }) async {
+    final db = await database;
+    final end = DateTime(throughMonth.year, throughMonth.month + 1);
+    final start = DateTime(
+      throughMonth.year,
+      throughMonth.month - monthCount + 1,
+    );
+    return db.rawQuery(
+      '''
+      SELECT month, SUM(income) AS income, SUM(expenses) AS expenses
+      FROM (
+        SELECT strftime('%Y-%m', date) AS month, 0 AS income,
+               SUM(amount) AS expenses
+        FROM expenses
+        WHERE date >= ? AND date < ?
+        GROUP BY strftime('%Y-%m', date)
+        UNION ALL
+        SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS income,
+               0 AS expenses
+        FROM income
+        WHERE date >= ? AND date < ?
+        GROUP BY strftime('%Y-%m', date)
+      )
+      GROUP BY month
+      ORDER BY month ASC
+      ''',
+      [
+        start.toIso8601String(),
+        end.toIso8601String(),
+        start.toIso8601String(),
+        end.toIso8601String(),
+      ],
+    );
   }
 
   Future<List<Map<String, dynamic>>> getCategoryTotals(
