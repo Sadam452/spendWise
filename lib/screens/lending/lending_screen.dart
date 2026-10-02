@@ -47,14 +47,91 @@ Future<void> _sendWhatsApp(
   }
 }
 
+class _LendingEntryRow extends StatelessWidget {
+  final DateTime date;
+  final double amount;
+  final bool isSettled;
+  final Color color;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _LendingEntryRow({
+    required this.date,
+    required this.amount,
+    required this.isSettled,
+    required this.color,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final actionColor = AppColors.textSecondary(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.background(context),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                DateFormat('d MMM yyyy').format(date),
+                style: TextStyle(
+                  color: AppColors.textSecondary(context),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            Text(
+              '${AppConstants.currency}${NumberFormat('#,##,###').format(amount)}',
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: isSettled ? 'Settled entry cannot be edited' : 'Edit',
+              visualDensity: VisualDensity.compact,
+              iconSize: 18,
+              onPressed: isSettled ? null : onEdit,
+              icon: Icon(
+                Icons.edit_outlined,
+                color: isSettled ? AppColors.textMuted(context) : actionColor,
+              ),
+            ),
+            IconButton(
+              tooltip: isSettled ? 'Settled entry cannot be deleted' : 'Delete',
+              visualDensity: VisualDensity.compact,
+              iconSize: 18,
+              onPressed: isSettled ? null : onDelete,
+              icon: Icon(
+                Icons.delete_outline,
+                color: isSettled
+                    ? AppColors.textMuted(context)
+                    : AppColors.expense,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 Future<void> _confirmSettle(
   BuildContext context,
-  int lendingId,
+  PersonLendingSummary person,
   String type,
-  double remainingAmount,
-  String name,
 ) async {
   final themeColor = type == 'lent' ? AppColors.purple : AppColors.teal;
+  final remainingAmount = person.outstanding;
 
   final confirm = await showDialog<bool>(
     context: context,
@@ -66,7 +143,7 @@ Future<void> _confirmSettle(
         style: TextStyle(color: AppColors.textPrimary(context)),
       ),
       content: Text(
-        'This will record a final repayment of ${AppConstants.currency}${remainingAmount.toStringAsFixed(0)} and mark the record with $name as completely settled.',
+        'This will record a final repayment of ${AppConstants.currency}${remainingAmount.toStringAsFixed(0)} and settle all outstanding entries with ${person.name}.',
         style: TextStyle(color: AppColors.textSecondary(context)),
       ),
       actions: [
@@ -87,8 +164,8 @@ Future<void> _confirmSettle(
   );
 
   if (confirm == true && context.mounted) {
-    await context.read<LendingProvider>().addPartialReturn(
-      lendingId: lendingId,
+    await context.read<LendingProvider>().recordPersonRepayment(
+      person: person,
       type: type,
       amount: remainingAmount,
       date: DateTime.now(),
@@ -102,10 +179,10 @@ Future<void> _confirmSettle(
 
 void _showPartialReturnDialog(
   BuildContext context,
-  int lendingId,
+  PersonLendingSummary person,
   String type,
-  double maxAmount,
 ) {
+  final maxAmount = person.outstanding;
   final amountCtrl = TextEditingController();
   final commentCtrl = TextEditingController();
   DateTime selectedDate = DateTime.now();
@@ -146,7 +223,9 @@ void _showPartialReturnDialog(
               ),
               const SizedBox(height: 20),
               Text(
-                'Record Repayment',
+                type == 'lent'
+                    ? 'Record return from ${person.name}'
+                    : 'Record payment to ${person.name}',
                 style: TextStyle(
                   color: AppColors.textPrimary(context),
                   fontSize: 18,
@@ -174,7 +253,7 @@ void _showPartialReturnDialog(
                   fontSize: 16,
                 ),
                 decoration: InputDecoration(
-                  labelText: 'Amount Paid',
+                  labelText: type == 'lent' ? 'Amount received' : 'Amount paid',
                   prefixText: '${AppConstants.currency} ',
                   prefixStyle: TextStyle(
                     color: themeColor,
@@ -256,8 +335,8 @@ void _showPartialReturnDialog(
                 child: ElevatedButton(
                   onPressed: () async {
                     if (!formKey.currentState!.validate()) return;
-                    await context.read<LendingProvider>().addPartialReturn(
-                      lendingId: lendingId,
+                    await context.read<LendingProvider>().recordPersonRepayment(
+                      person: person,
                       type: type,
                       amount: double.parse(amountCtrl.text),
                       date: selectedDate,
@@ -295,7 +374,11 @@ void _showPartialReturnDialog(
   );
 }
 
-void _showHistorySheet(BuildContext context, int lendingId, String type) {
+void _showHistorySheet(
+  BuildContext context,
+  PersonLendingSummary person,
+  String type,
+) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true, // FIX 1: Allows the sheet to expand properly
@@ -304,7 +387,10 @@ void _showHistorySheet(BuildContext context, int lendingId, String type) {
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (ctx) => FutureBuilder<List<LendingTransaction>>(
-      future: context.read<LendingProvider>().getReturnHistory(lendingId, type),
+      future: context.read<LendingProvider>().getPersonReturnHistory(
+        person,
+        type,
+      ),
       builder: (ctx, snapshot) {
         if (!snapshot.hasData)
           return const SizedBox(
@@ -337,7 +423,7 @@ void _showHistorySheet(BuildContext context, int lendingId, String type) {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Repayment History',
+                  'Payment history with ${person.name}',
                   style: TextStyle(
                     color: AppColors.textPrimary(context),
                     fontSize: 18,
@@ -522,7 +608,7 @@ class _LentTab extends StatelessWidget {
                             padding: const EdgeInsets.only(bottom: 12),
                             child: _PersonLentCard(
                               person: person,
-                              onAddMore: (entry) => _showLentDialog(
+                              onAddMore: (person) => _showLentDialog(
                                 context,
                                 null,
                                 prefillName: person.name,
@@ -531,21 +617,15 @@ class _LentTab extends StatelessWidget {
                               onEdit: (entry) =>
                                   _showLentDialog(context, entry),
                               onDelete: (entry) => _deleteLent(context, entry),
-                              onReturn: (entry) => _showPartialReturnDialog(
+                              onReturn: (person) => _showPartialReturnDialog(
                                 context,
-                                entry.id!,
+                                person,
                                 'lent',
-                                entry.outstanding,
                               ),
                               onHistory: (entry) =>
-                                  _showHistorySheet(context, entry.id!, 'lent'),
-                              onSettle: (entry) => _confirmSettle(
-                                context,
-                                entry.id!,
-                                'lent',
-                                entry.outstanding,
-                                entry.recipientName,
-                              ),
+                                  _showHistorySheet(context, entry, 'lent'),
+                              onSettle: (person) =>
+                                  _confirmSettle(context, person, 'lent'),
                             ),
                           ),
                         )
@@ -647,7 +727,7 @@ class _BorrowedTab extends StatelessWidget {
                             padding: const EdgeInsets.only(bottom: 12),
                             child: _PersonBorrowedCard(
                               person: person,
-                              onAddMore: (entry) => _showBorrowedDialog(
+                              onAddMore: (person) => _showBorrowedDialog(
                                 context,
                                 null,
                                 prefillName: person.name,
@@ -683,24 +763,18 @@ class _BorrowedTab extends StatelessWidget {
                                   ),
                                 );
                               },
-                              onReturn: (entry) => _showPartialReturnDialog(
+                              onReturn: (person) => _showPartialReturnDialog(
                                 context,
-                                entry.id!,
-                                'borrowed',
-                                entry.outstanding,
-                              ),
-                              onHistory: (entry) => _showHistorySheet(
-                                context,
-                                entry.id!,
+                                person,
                                 'borrowed',
                               ),
-                              onSettle: (entry) => _confirmSettle(
+                              onHistory: (person) => _showHistorySheet(
                                 context,
-                                entry.id!,
+                                person,
                                 'borrowed',
-                                entry.outstanding,
-                                entry.recipientName,
                               ),
+                              onSettle: (person) =>
+                                  _confirmSettle(context, person, 'borrowed'),
                             ),
                           ),
                         )
@@ -837,6 +911,131 @@ class _LendingFilterRow extends StatelessWidget {
   }
 }
 
+class _PersonLevelLendingActions extends StatelessWidget {
+  final PersonLendingSummary person;
+  final bool isLent;
+  final ValueChanged<PersonLendingSummary> onReturn;
+  final ValueChanged<PersonLendingSummary> onSettle;
+  final ValueChanged<PersonLendingSummary> onAddMore;
+  final ValueChanged<PersonLendingSummary> onHistory;
+  final VoidCallback? onNotify;
+
+  const _PersonLevelLendingActions({
+    required this.person,
+    required this.isLent,
+    required this.onReturn,
+    required this.onSettle,
+    required this.onAddMore,
+    required this.onHistory,
+    this.onNotify,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final canPay = person.outstanding > 0;
+    final color = isLent ? AppColors.purple : AppColors.teal;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 8, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton.icon(
+              onPressed: canPay ? () => onReturn(person) : null,
+              icon: const Icon(Icons.payments_outlined, size: 16),
+              label: Text(isLent ? 'Return' : 'Pay'),
+              style: TextButton.styleFrom(
+                foregroundColor: color,
+                disabledForegroundColor: AppColors.textMuted(context),
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextButton.icon(
+              onPressed: canPay ? () => onSettle(person) : null,
+              icon: const Icon(Icons.done_all, size: 16),
+              label: const Text('Settle all'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textSecondary(context),
+                disabledForegroundColor: AppColors.textMuted(context),
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Person actions',
+            icon: Icon(
+              Icons.more_vert,
+              color: AppColors.textSecondary(context),
+            ),
+            onSelected: (value) {
+              if (value == 'add_more') onAddMore(person);
+              if (value == 'history') onHistory(person);
+              if (value == 'notify') onNotify?.call();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'add_more',
+                child: Row(
+                  children: [
+                    Icon(Icons.add_circle_outline, size: 18),
+                    SizedBox(width: 12),
+                    Text('Add more to this person'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'history',
+                child: Row(
+                  children: [
+                    Icon(Icons.history, size: 18),
+                    SizedBox(width: 12),
+                    Text('History'),
+                  ],
+                ),
+              ),
+              if (onNotify != null)
+                const PopupMenuItem(
+                  value: 'notify',
+                  child: Row(
+                    children: [
+                      Icon(Icons.chat_bubble_outline, size: 18),
+                      SizedBox(width: 12),
+                      Text('Notify'),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LendingSummary extends StatelessWidget {
   final String totalLabel;
   final double total;
@@ -924,12 +1123,12 @@ class _LendingSummary extends StatelessWidget {
 
 class _PersonLentCard extends StatefulWidget {
   final PersonLendingSummary person;
-  final Function(LentMoney) onAddMore;
+  final Function(PersonLendingSummary) onAddMore;
   final Function(LentMoney) onDelete;
   final Function(LentMoney) onEdit;
-  final Function(LentMoney) onReturn;
-  final Function(LentMoney) onHistory;
-  final Function(LentMoney) onSettle;
+  final Function(PersonLendingSummary) onReturn;
+  final Function(PersonLendingSummary) onHistory;
+  final Function(PersonLendingSummary) onSettle;
 
   const _PersonLentCard({
     required this.person,
@@ -1045,309 +1244,39 @@ class _PersonLentCardState extends State<_PersonLentCard> {
               ),
             ),
           ),
+          _PersonLevelLendingActions(
+            person: p,
+            isLent: true,
+            onReturn: widget.onReturn,
+            onSettle: widget.onSettle,
+            onAddMore: widget.onAddMore,
+            onHistory: widget.onHistory,
+            onNotify: p.outstanding > 0
+                ? () {
+                    final oldestOutstanding = p.entries
+                        .where((entry) => entry.outstanding > 0)
+                        .map((entry) => entry.date)
+                        .reduce((a, b) => a.isBefore(b) ? a : b);
+                    _sendWhatsApp(
+                      context,
+                      p.phone,
+                      p.name,
+                      p.outstanding,
+                      oldestOutstanding,
+                    );
+                  }
+                : null,
+          ),
           if (_expanded)
             Column(
               children: p.entries.map((entry) {
-                final bool isSettled = entry.isSettled;
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.background(context),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSettled
-                            ? AppColors.primary.withOpacity(0.5)
-                            : AppColors.border(context),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          DateFormat(
-                                            'd MMM yyyy',
-                                          ).format(entry.date),
-                                          style: TextStyle(
-                                            color: AppColors.textSecondary(
-                                              context,
-                                            ),
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                        if (isSettled) ...[
-                                          const SizedBox(width: 6),
-                                          const Icon(
-                                            Icons.check_circle,
-                                            color: AppColors.primary,
-                                            size: 12,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          const Text(
-                                            "Settled",
-                                            style: TextStyle(
-                                              color: AppColors.primary,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    if (entry.notes != null &&
-                                        entry.notes!.isNotEmpty)
-                                      Text(
-                                        entry.notes!,
-                                        style: TextStyle(
-                                          color: AppColors.textMuted(context),
-                                          fontSize: 11,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    _fmt(entry.amount),
-                                    style: TextStyle(
-                                      color: isSettled
-                                          ? AppColors.textSecondary(context)
-                                          : AppColors.purple,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  if (entry.amountReturned > 0)
-                                    Text(
-                                      'Returned: ${_fmt(entry.amountReturned)}',
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.only(
-                            left: 12,
-                            right: 4,
-                            top: 4,
-                            bottom: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              top: BorderSide(color: AppColors.border(context)),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      foregroundColor: AppColors.primary,
-                                    ),
-                                    onPressed: isSettled
-                                        ? null
-                                        : () => widget.onReturn(entry),
-                                    icon: const Icon(
-                                      Icons.check_circle_outline,
-                                      size: 18,
-                                    ),
-                                    label: const Text(
-                                      'Return',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      foregroundColor: AppColors.purple,
-                                    ),
-                                    onPressed: isSettled
-                                        ? null
-                                        : () => widget.onSettle(entry),
-                                    icon: const Icon(Icons.done_all, size: 18),
-                                    label: const Text(
-                                      'Settle All',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              PopupMenuButton<String>(
-                                icon: Icon(
-                                  Icons.more_vert,
-                                  color: AppColors.textSecondary(context),
-                                ),
-                                color: AppColors.card(context),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                onSelected: (value) {
-                                  if (value == 'history')
-                                    widget.onHistory(entry);
-                                  else if (value == 'notify') {
-                                    final oldest = widget.person.entries.reduce(
-                                      (a, b) => a.date.isBefore(b.date) ? a : b,
-                                    );
-                                    _sendWhatsApp(
-                                      context,
-                                      widget.person.phone,
-                                      widget.person.name,
-                                      widget.person.totalAmount,
-                                      oldest.date,
-                                    );
-                                  } else if (value == 'add_more')
-                                    widget.onAddMore(entry);
-                                  else if (value == 'edit')
-                                    widget.onEdit(entry);
-                                  else if (value == 'delete')
-                                    widget.onDelete(entry);
-                                },
-                                itemBuilder: (context) => [
-                                  PopupMenuItem(
-                                    value: 'add_more',
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.add_circle_outline,
-                                          size: 18,
-                                          color: AppColors.purple,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'Add more to this person',
-                                          style: TextStyle(
-                                            color: AppColors.textPrimary(
-                                              context,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'history',
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.history,
-                                          size: 18,
-                                          color: AppColors.info,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'History',
-                                          style: TextStyle(
-                                            color: AppColors.textPrimary(
-                                              context,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (!isSettled)
-                                    PopupMenuItem(
-                                      value: 'notify',
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.chat_bubble_outline,
-                                            size: 18,
-                                            color: AppColors.warning,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Notify',
-                                            style: TextStyle(
-                                              color: AppColors.textPrimary(
-                                                context,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  if (!isSettled)
-                                    PopupMenuItem(
-                                      value: 'edit',
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.edit_outlined,
-                                            size: 18,
-                                            color: AppColors.textPrimary(
-                                              context,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Edit',
-                                            style: TextStyle(
-                                              color: AppColors.textPrimary(
-                                                context,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  if (!isSettled)
-                                    PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.delete_outline,
-                                            size: 18,
-                                            color: AppColors.expense,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Delete',
-                                            style: TextStyle(
-                                              color: AppColors.expense,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                return _LendingEntryRow(
+                  date: entry.date,
+                  amount: entry.amount,
+                  isSettled: entry.isSettled,
+                  color: AppColors.purple,
+                  onEdit: () => widget.onEdit(entry),
+                  onDelete: () => widget.onDelete(entry),
                 );
               }).toList(),
             ),
@@ -1359,12 +1288,12 @@ class _PersonLentCardState extends State<_PersonLentCard> {
 
 class _PersonBorrowedCard extends StatefulWidget {
   final PersonLendingSummary person;
-  final Function(LentMoney) onAddMore;
+  final Function(PersonLendingSummary) onAddMore;
   final Function(dynamic) onEdit;
   final Function(dynamic) onDelete;
-  final Function(dynamic) onReturn;
-  final Function(dynamic) onHistory;
-  final Function(dynamic) onSettle;
+  final Function(PersonLendingSummary) onReturn;
+  final Function(PersonLendingSummary) onHistory;
+  final Function(PersonLendingSummary) onSettle;
 
   const _PersonBorrowedCard({
     required this.person,
@@ -1480,276 +1409,24 @@ class _PersonBorrowedCardState extends State<_PersonBorrowedCard> {
               ),
             ),
           ),
+          _PersonLevelLendingActions(
+            person: p,
+            isLent: false,
+            onReturn: widget.onReturn,
+            onSettle: widget.onSettle,
+            onAddMore: widget.onAddMore,
+            onHistory: widget.onHistory,
+          ),
           if (_expanded)
             Column(
               children: p.entries.map((entry) {
-                final bool isSettled = entry.isSettled;
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.background(context),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSettled
-                            ? AppColors.primary.withOpacity(0.5)
-                            : AppColors.border(context),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          DateFormat(
-                                            'd MMM yyyy',
-                                          ).format(entry.date),
-                                          style: TextStyle(
-                                            color: AppColors.textSecondary(
-                                              context,
-                                            ),
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                        if (isSettled) ...[
-                                          const SizedBox(width: 6),
-                                          const Icon(
-                                            Icons.check_circle,
-                                            color: AppColors.primary,
-                                            size: 12,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          const Text(
-                                            "Settled",
-                                            style: TextStyle(
-                                              color: AppColors.primary,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    if (entry.notes != null &&
-                                        entry.notes!.isNotEmpty)
-                                      Text(
-                                        entry.notes!,
-                                        style: TextStyle(
-                                          color: AppColors.textMuted(context),
-                                          fontSize: 11,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    _fmt(entry.amount),
-                                    style: TextStyle(
-                                      color: isSettled
-                                          ? AppColors.textSecondary(context)
-                                          : AppColors.teal,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  if (entry.amountReturned > 0)
-                                    Text(
-                                      'Paid: ${_fmt(entry.amountReturned)}',
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.only(
-                            left: 12,
-                            right: 4,
-                            top: 4,
-                            bottom: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              top: BorderSide(color: AppColors.border(context)),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      foregroundColor: AppColors.teal,
-                                    ),
-                                    onPressed: isSettled
-                                        ? null
-                                        : () => widget.onReturn(entry),
-                                    icon: const Icon(
-                                      Icons.check_circle_outline,
-                                      size: 18,
-                                    ),
-                                    label: const Text(
-                                      'Pay',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      foregroundColor: AppColors.teal,
-                                    ),
-                                    onPressed: isSettled
-                                        ? null
-                                        : () => widget.onSettle(entry),
-                                    icon: const Icon(Icons.done_all, size: 18),
-                                    label: const Text(
-                                      'Settle All',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              PopupMenuButton<String>(
-                                icon: Icon(
-                                  Icons.more_vert,
-                                  color: AppColors.textSecondary(context),
-                                ),
-                                color: AppColors.card(context),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                onSelected: (value) {
-                                  if (value == 'history')
-                                    widget.onHistory(entry);
-                                  else if (value == 'add_more')
-                                    widget.onAddMore(entry);
-                                  else if (value == 'edit')
-                                    widget.onEdit(entry);
-                                  else if (value == 'delete')
-                                    widget.onDelete(entry);
-                                },
-                                itemBuilder: (context) => [
-                                  PopupMenuItem(
-                                    value: 'add_more',
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.add_circle_outline,
-                                          size: 18,
-                                          color: AppColors.teal,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'Add more to this person',
-                                          style: TextStyle(
-                                            color: AppColors.textPrimary(
-                                              context,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'history',
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.history,
-                                          size: 18,
-                                          color: AppColors.info,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'History',
-                                          style: TextStyle(
-                                            color: AppColors.textPrimary(
-                                              context,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (!isSettled)
-                                    PopupMenuItem(
-                                      value: 'edit',
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.edit_outlined,
-                                            size: 18,
-                                            color: AppColors.textPrimary(
-                                              context,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Edit',
-                                            style: TextStyle(
-                                              color: AppColors.textPrimary(
-                                                context,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  if (!isSettled)
-                                    PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.delete_outline,
-                                            size: 18,
-                                            color: AppColors.expense,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Delete',
-                                            style: TextStyle(
-                                              color: AppColors.expense,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                return _LendingEntryRow(
+                  date: entry.date,
+                  amount: entry.amount,
+                  isSettled: entry.isSettled,
+                  color: AppColors.teal,
+                  onEdit: () => widget.onEdit(entry),
+                  onDelete: () => widget.onDelete(entry),
                 );
               }).toList(),
             ),

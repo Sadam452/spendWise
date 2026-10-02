@@ -66,7 +66,7 @@ class MainScreenState extends State<MainScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.people_outline),
               activeIcon: Icon(Icons.people),
-              label: 'Lend/Borrow',
+              label: 'Loans',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.bar_chart_outlined),

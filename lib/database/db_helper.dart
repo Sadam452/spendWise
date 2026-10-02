@@ -770,4 +770,104 @@ class DBHelper {
       orderBy: 'date DESC, created_at DESC', // Shows newest payments first
     );
   }
+
+  Future<int> recordPersonRepayment({
+    required List<int> lendingIds,
+    required String type,
+    required double amount,
+    required DateTime date,
+    String? comments,
+  }) async {
+    if (lendingIds.isEmpty || amount <= 0) {
+      throw ArgumentError(
+        'A repayment requires outstanding records and amount.',
+      );
+    }
+    final table = switch (type) {
+      'lent' => 'lent_money',
+      'borrowed' => 'borrowed_money',
+      _ => throw ArgumentError.value(
+        type,
+        'type',
+        'Unsupported repayment type',
+      ),
+    };
+    final db = await database;
+    return db.transaction((txn) async {
+      final placeholders = List.filled(lendingIds.length, '?').join(', ');
+      final records = await txn.query(
+        table,
+        columns: ['id', 'amount', 'amount_returned', 'date'],
+        where: 'id IN ($placeholders)',
+        whereArgs: lendingIds,
+        orderBy: 'date ASC, id ASC',
+      );
+      final outstandingTotal = records.fold<double>(
+        0,
+        (sum, record) =>
+            sum +
+            ((record['amount'] as num).toDouble() -
+                (record['amount_returned'] as num? ?? 0).toDouble()),
+      );
+      if (amount > outstandingTotal) {
+        throw ArgumentError('Repayment exceeds the outstanding balance.');
+      }
+
+      var remainingPayment = amount;
+      int? historyLendingId;
+      for (final record in records) {
+        if (remainingPayment <= 0) break;
+        final recordAmount = (record['amount'] as num).toDouble();
+        final amountReturned = (record['amount_returned'] as num? ?? 0)
+            .toDouble();
+        final outstanding = recordAmount - amountReturned;
+        if (outstanding <= 0) continue;
+
+        final applied = remainingPayment < outstanding
+            ? remainingPayment
+            : outstanding;
+        final updatedReturned = amountReturned + applied;
+        final id = record['id'] as int;
+        historyLendingId ??= id;
+        await txn.update(
+          table,
+          {
+            'amount_returned': updatedReturned,
+            'is_settled': updatedReturned >= recordAmount ? 1 : 0,
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        remainingPayment -= applied;
+      }
+
+      if (historyLendingId == null) {
+        throw StateError('No outstanding records found for repayment.');
+      }
+      await txn.insert('lending_transactions', {
+        'lending_id': historyLendingId,
+        'type': type,
+        'amount': amount,
+        'date': date.toIso8601String(),
+        'comments': comments,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      return records.length;
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPersonLendingTransactions(
+    List<int> lendingIds,
+    String type,
+  ) async {
+    if (lendingIds.isEmpty) return [];
+    final db = await database;
+    final placeholders = List.filled(lendingIds.length, '?').join(', ');
+    return db.query(
+      'lending_transactions',
+      where: 'lending_id IN ($placeholders) AND type = ?',
+      whereArgs: [...lendingIds, type],
+      orderBy: 'date DESC, created_at DESC, id DESC',
+    );
+  }
 }

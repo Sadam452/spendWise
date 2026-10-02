@@ -220,6 +220,27 @@ class LendingProvider extends ChangeNotifier {
     await loadBorrowed();
   }
 
+  Future<void> recordPersonRepayment({
+    required PersonLendingSummary person,
+    required String type,
+    required double amount,
+    required DateTime date,
+    String? comments,
+  }) async {
+    await _db.recordPersonRepayment(
+      lendingIds: person.entries.map((entry) => entry.id!).toList(),
+      type: type,
+      amount: amount,
+      date: date,
+      comments: comments,
+    );
+    if (type == 'lent') {
+      await loadLent();
+    } else {
+      await loadBorrowed();
+    }
+  }
+
   List<PersonLendingSummary> get groupedLent {
     final Map<String, List<LentMoney>> grouped = {};
 
@@ -339,5 +360,16 @@ class LendingProvider extends ChangeNotifier {
       type,
     );
     return maps.map((m) => LendingTransaction.fromMap(m)).toList();
+  }
+
+  Future<List<LendingTransaction>> getPersonReturnHistory(
+    PersonLendingSummary person,
+    String type,
+  ) async {
+    final maps = await DBHelper.instance.getPersonLendingTransactions(
+      person.entries.map((entry) => entry.id!).toList(),
+      type,
+    );
+    return maps.map((map) => LendingTransaction.fromMap(map)).toList();
   }
 }
